@@ -88,7 +88,7 @@ def run_sim2smv(fileout):
   print "Ncells_abc=",SIM.Ncells_abc
   SIM.Ncells_abc=temp
   print "Ncells_abc=",SIM.Ncells_abc
-  print "xtalsize_mm=",SIM.xtalsize_mm
+  print "xtal_size_mm=",SIM.xtal_size_mm
   print "unit_cell_Adeg=",SIM.unit_cell_Adeg
   print "unit_cell_tuple=",SIM.unit_cell_tuple
   print "missets_deg=",SIM.missets_deg
@@ -150,7 +150,7 @@ def run_sim2smv(fileout):
   SIM.add_nanoBragg_spots()
   # simulated crystal is only 125 unit cells (25 nm wide)
   # amplify spot signal to simulate physical crystal of 4000x larger: 100 um (64e9 x the volume)
-  SIM.raw *= 64e9;
+  SIM.raw_pixels *= 64e9;
   SIM.to_smv_format(fileout="intimage_001.img")
   # rough approximation to water: interpolation points for sin(theta/lambda) vs structure factor
   bg = flex.vec2_double([(0,2.57),(0.0365,2.58),(0.07,2.8),(0.12,5),(0.162,8),(0.2,6.75),(0.18,7.32),(0.216,6.75),(0.236,6.5),(0.28,4.5),(0.3,4.3),(0.345,4.36),(0.436,3.77),(0.5,3.17)])
@@ -179,7 +179,7 @@ def run_sim2smv(fileout):
   SIM.detector_psf_fwhm_mm=0.08;
   SIM.detector_psf_type=shapetype.Fiber
   #SIM.apply_psf()
-  print SIM.raw[500000]
+  print SIM.raw_pixels[500000]
   SIM.to_smv_format(fileout="intimage_003.img")
   #SIM.detector_psf_fwhm_mm=0
   print "quantum_gain=",SIM.quantum_gain
@@ -193,7 +193,7 @@ def run_sim2smv(fileout):
   SIM.add_noise()
 
   #fileout = "intimage_001.img"
-  print "raw=",SIM.raw
+  print "raw_pixels=",SIM.raw_pixels
   SIM.to_smv_format(fileout="noiseimage_001.img",intfile_scale=1)
 
   # try to write as CBF
