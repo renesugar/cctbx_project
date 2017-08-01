@@ -1,4 +1,4 @@
-/* perfect-lattice nanocrystal diffraction simulator            -James Holton and Ken Frankel           6-24-17
+/* perfect-lattice nanocrystal diffraction simulator            -James Holton and Ken Frankel           7-26-17
 
 example:
 
@@ -350,7 +350,7 @@ int main(int argc, char** argv)
     long seed;
     seed = -time((time_t *)0);
 //    printf("random number seed = %u\n",seed);
-    long mosaic_seed = 12345678;
+    long mosaic_seed = -12345678;
 
     /* interpolation arrays */
     int interpolate = 2;
@@ -544,8 +544,10 @@ int main(int argc, char** argv)
             if(strstr(argv[i], "-misset") && (argc > (i+1)))
             {
                 if(strstr(argv[i+1],"rand"))
-                misset[0] = -1;
-                continue;
+                {
+                    misset[0] = -1;
+                    continue;
+                }
             }
             if(strstr(argv[i], "-misset") && (argc > (i+3)))
             {
@@ -1283,7 +1285,7 @@ int main(int argc, char** argv)
         printf("\t-phisteps        \tnumber of rotation steps to render\n");
         printf("\t-water           \tadd contribution of x microns of water surrounding crystal\n");
         printf("\t-floatfile       \tname of binary output file (4-byte floats)\n");
-        printf("\t-intfile         \tname of noiseless smv-formatted output file\n");
+        printf("\t-intfile         \tname of noiseless smv-formatted output file (not on absolute scale by default)\n");
         printf("\t-scale           \tscale factor to apply to intfile (default: autoscale)\n");
         printf("\t-noisefile       \tname of photon-scale smv-formatted output file (with Poisson noise)\n");
         printf("\t-roi             \tonly render part of the image: xmin xmax ymin ymax\n");

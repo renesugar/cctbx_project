@@ -1666,6 +1666,7 @@ nanoBragg::init_Fhkl()
         for (h0=0; h0<h_range;h0++) {
             for (k0=0; k0<k_range;k0++) {
                 for (l0=0; l0<l_range;l0++) {
+                    if(verbose>9) printf("initializing %d %d %d to default_F = %g:\n",h0,k0,l0,default_F);
                     Fhkl[h0][k0][l0] = default_F;
                 }
             }
@@ -1857,7 +1858,7 @@ nanoBragg::show_detector_thicksteps()
 {
     /* print out detector sensor thickness with sweep over all sensor layers */
     for(thick_tic=0;thick_tic<detector_thicksteps;++thick_tic){
-        printf("thick%d = %g um\n",thick_tic,detector_thickstep*thick_tic*1e6);
+        if(verbose) printf("thick%d = %g um\n",thick_tic,detector_thickstep*thick_tic*1e6);
     }
 }
 
@@ -2225,7 +2226,7 @@ nanoBragg::show_mosaic_blocks()
 void
 nanoBragg::show_params()
 {
-    printf("nanoBragg nanocrystal diffraction simulator - James Holton and Ken Frankel 6-21-17\n");
+    printf("nanoBragg nanocrystal diffraction simulator - James Holton and Ken Frankel 8-1-17\n");
 
     printf("  %d initialized hkls (all others =%g)\n",hkls,default_F);
     printf("  ");
@@ -2605,6 +2606,7 @@ nanoBragg::add_nanoBragg_spots()
                                             if(verbose) printf("WARNING: further warnings will not be printed! ");
                                         }
                                         F_cell = default_F;
+                                        interpolate=0;
                                         continue;
                                     }
 
@@ -2649,7 +2651,8 @@ nanoBragg::add_nanoBragg_spots()
                                     /* run the tricubic polynomial interpolation */
                                     polin3(h_interp_d,k_interp_d,l_interp_d,sub_Fhkl,h,k,l,&F_cell);
                                 }
-                                else
+
+                                if(! interpolate)
                                 {
                                     if ( (h0<=h_max) && (h0>=h_min) && (k0<=k_max) && (k0>=k_min) && (l0<=l_max) && (l0>=l_min)  ) {
                                         /* just take nearest-neighbor */
@@ -2723,7 +2726,7 @@ nanoBragg::add_nanoBragg_spots()
             }
             else
             {
-                if(progress_meter && progress_pixels/100 > 0)
+                if(progress_meter && verbose && progress_pixels/100 > 0)
                 {
                     if(progress_pixel % ( progress_pixels/20 ) == 0 ||
                        ((10*progress_pixel<progress_pixels ||
