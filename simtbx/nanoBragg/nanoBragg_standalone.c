@@ -1,4 +1,4 @@
-/* perfect-lattice nanocrystal diffraction simulator            -James Holton and Ken Frankel           7-26-17
+/* perfect-lattice nanocrystal diffraction simulator            -James Holton and Ken Frankel           9-17-17
 
 example:
 
@@ -1271,7 +1271,7 @@ int main(int argc, char** argv)
         printf("\t-tophat_spots    \tclip lattice transform at fwhm: no inter-Bragg maxima\n");
         printf("\t-oversample      \tnumber of sub-pixels per pixel. use this if xtalsize/lambda > distance/pixel\n");
         printf("\t-lambda          \tincident x-ray wavelength in Angstrom. may also use -energy in eV\n");
-        printf("\t-mosaic          \tisotropic mosaic spread in degrees\n");
+        printf("\t-mosaic          \tisotropic mosaic spread in degrees (use 90 for powder)\n");
         printf("\t-mosaic_domains  \tnumber of randomly-oriented mosaic domains to render\n");
         printf("\t-dispersion      \tspectral dispersion: delta-lambda/lambda in percent\n");
         printf("\t-dispsteps       \tnumber of wavelengths in above range\n");
@@ -2771,7 +2771,7 @@ int main(int argc, char** argv)
 
                                     if(! interpolate)
                                     {
-                                        if ( (h0<=h_max) && (h0>=h_min) && (k0<=k_max) && (k0>=k_min) && (l0<=l_max) && (l0>=l_min)  ) {
+                                        if ( hkls && (h0<=h_max) && (h0>=h_min) && (k0<=k_max) && (k0>=k_min) && (l0<=l_max) && (l0>=l_min)  ) {
                                             /* just take nearest-neighbor */
                                             F_cell = Fhkl[h0-h_min][k0-k_min][l0-l_min];
                                         }

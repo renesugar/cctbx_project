@@ -53,6 +53,9 @@ with open(stolfile, "rb") as fp:
 import dxtbx
 img = dxtbx.load(imgfile)
 panel = img.get_detector().to_dict()['panels'][0]
+pixel_size_mm = panel['pixel_size'][0]
+distance_mm = -panel['origin'][2]
+#beam_center_mm =
 
 # create the simulation
 SIM = nanoBragg(img.get_detector(),img.get_beam(),verbose=6)
@@ -67,8 +70,8 @@ print SIM.Fbg_vs_stol[1]
 SIM.Fbg_vs_stol[1]=(0,0)
 print SIM.Fbg_vs_stol[1]
 
-from IPython import embed
-embed()
+#from IPython import embed
+#embed()
 
 
 blarg = SIM.Fbg_vs_stol
@@ -77,7 +80,8 @@ blarg[1] = (0,0)
 SIM.Fbg_vs_stol = blarg
 print SIM.Fbg_vs_stol[1]
 
-exit()
+# sigh, just keep going...
+#exit()
 
 print "beam_center_mm=",SIM.beam_center_mm
 print "XDS_ORGXY=",SIM.XDS_ORGXY

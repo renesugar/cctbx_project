@@ -46,7 +46,7 @@ def run_sim2smv(fileout):
   SIM = nanoBragg(detpixels_slowfast=(1000,1000),pixel_size_mm=0.1,Ncells_abc=(5,5,5),verbose=9)
   import sys
   if len(sys.argv)>2:
-    SIM.seed = int(sys.argv[2])
+    SIM.seed = -int(sys.argv[2])
     print "GOTHERE seed=",SIM.seed
   if len(sys.argv)>1:
     if sys.argv[1]=="random" : SIM.randomize_orientation()

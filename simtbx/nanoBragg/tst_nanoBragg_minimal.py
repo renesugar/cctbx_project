@@ -35,5 +35,4 @@ SIM.to_smv_format(fileout="noiseimage_001.img")
 
 
 if __name__=="__main__":
-  tst_all()
   print "OK"
