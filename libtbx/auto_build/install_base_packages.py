@@ -69,6 +69,8 @@ class installer (object) :
       help="Use the system Python interpreter", action="store_true")
     parser.add_option("--python3", dest="python3", action="store_true", default=False,
       help="Install a Python3 interpreter. This is unsupported and purely for development purposes.")
+    parser.add_option("--with-conda", dest="with_conda", action="store_true", default=False,
+      help="Install base directory using conda. Currently only for test purposes")
     parser.add_option("-g", "--debug", dest="debug", action="store_true",
       help="Build in debugging mode", default=False)
     # Package set options.
@@ -107,6 +109,7 @@ class installer (object) :
     self.flag_is_mac = (sys.platform == "darwin")
     self.cppflags_start = os.environ.get("CPPFLAGS", "")
     self.ldflags_start = os.environ.get("LDFLAGS", "")
+    self.with_conda = if options.with_conda
 
     # set default macOS flags
     if (self.flag_is_mac):
@@ -674,6 +677,11 @@ Installation of Python packages may fail.
       if not found:
         raise Exception("No Fortran compiler found for Scipy. Requires one of: %s"%(", ".join(compilers)))
 
+  def install_with_conda(self, packages=None, extra_opts=[])
+    import subprocess
+    if op.isdir(self.base_dir):
+      print ' ############ Base Directory exists ###############'
+
   def build_dependencies(self, packages=None):
     # Build in the correct dependency order.
     packages = packages or []
@@ -718,13 +726,40 @@ Installation of Python packages may fail.
       'fonts',
       'wxpython',
     ]
+    conda_pkg_list = [
+      'openssl=1.0.2',
+      'python=2.7.14',
+      'certifi',
+      'numpy=1.8.2',
+      'cython=0.22',
+      'libpng',
+      'pytest',
+      'jinja=2.9.6',
+      'biopython=1.68',
+      'docutils=0.12',
+      'sphinx',
+      'pyopengl',
+      'freetype',
+      'matplotlib=2.0.0',
+      'pillow',
+      'glib',
+      'expat=2.1.0',
+      'fontconfig',
+      'pixman=0.34',
+      'libtiff=4.0.6',
+      'cairo',
+      'wxpython'
+    ]
     self.options.skip_base = self.options.skip_base.split(",")
+    if self.options.with_conda:
+      self.install_with_conda(conda_pkg_list, extra_opts=[])
     packages_order = []
     for i in packages:
       assert i in order, "Installation order unknown for %s" % i
     for i in order:
       if i in packages:
         if i in self.options.skip_base: continue
+        if self.options.with_conda and i in conda_pkg_list: continue
         packages_order.append(i)
 
     if self.options.download_only:
