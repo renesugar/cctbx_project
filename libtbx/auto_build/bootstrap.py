@@ -1033,6 +1033,7 @@ class Builder(object):
       update=True,
       revert=None,
       base=True,
+      conda=False,
       build=True,
       tests=True,
       doc=True,
@@ -1115,6 +1116,12 @@ class Builder(object):
       if enable_shared:
         extra_opts.append("--python-shared")
       self.add_base(extra_opts=extra_opts)
+
+    if conda:
+      extra_opts = ["--nproc=%s" % str(self.nproc)]
+      if enable_shared:
+        extra_opts.append("--python-shared")
+      self.add_conda(extra_opts=extra_opts)
 
     # Configure, make, get revision numbers
     if build and not self.download_only:
@@ -1535,6 +1542,32 @@ class Builder(object):
     print "Installing base packages using:\n  " + " ".join(command)
     self.add_step(self.shell(name='base', command=command, workdir=['.']))
 
+  def add_conda(self, extra_opts=[]):
+    """Build the base dependencies, e.g. Python, HDF5, etc. using conda"""
+    if self.with_python:
+      extra_opts = ['--with-python', self.with_python]
+    if self.verbose:
+      extra_opts.append('-v')
+    if self.download_only:
+      extra_opts.append('--download-only')
+    if self.auth.get('git_ssh',False):
+      extra_opts.append('--git-ssh')
+    if self.skip_base:
+      extra_opts.append('--skip-base=%s' % self.skip_base)
+    if self.python3:
+      extra_opts.append('--python3')
+    if not self.force_base_build:
+      if "--skip-if-exists" not in extra_opts:
+        extra_opts.append("--skip-if-exists")
+    command=[
+      'python',
+      self.opjoin('modules', 'cctbx_project', 'libtbx', 'auto_build', 'install_base_packages.py'),
+      '--python-shared',
+      '--%s'%self.BASE_PACKAGES
+    ] + extra_opts
+    print "Installing base packages using:\n  " + " ".join(command)
+    self.add_step(self.shell(name='conda', command=command, workdir=['.']))
+
   def add_dispatchers(self, product_name="phenix"):
     """Write dispatcher_include file."""
     """Generating Phenix environment additions for dispatchers..."""
@@ -1763,6 +1796,12 @@ class DIALSBuilder(CCIBuilder):
 
   def add_base(self, extra_opts=[]):
     super(DIALSBuilder, self).add_base(
+      extra_opts=['--dials',
+                  #'--wxpython3'
+                 ] + extra_opts)
+
+  def add_conda(self, extra_opts=[]):
+    super(DIALSBuilder, self).add_conda(
       extra_opts=['--dials',
                   #'--wxpython3'
                  ] + extra_opts)
@@ -2319,7 +2358,7 @@ def run(root=None):
   # options.root = options.root or root
 
   # Check actions
-  allowedargs = ['cleanup', 'hot', 'update', 'base', 'build', 'tests', 'doc']
+  allowedargs = ['cleanup', 'hot', 'update', 'base', 'conda','build', 'tests', 'doc']
   args = args or ['hot', 'update', 'base', 'build']
   actions = []
   for arg in args:
@@ -2364,6 +2403,7 @@ def run(root=None):
     update=('update' in actions),
     revert=options.revert,
     base=('base' in actions),
+    conda=('conda' in actions),
     build=('build' in actions),
     tests=('tests' in actions),
     doc=('doc' in actions),
