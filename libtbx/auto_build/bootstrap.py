@@ -1118,6 +1118,9 @@ class Builder(object):
       self.add_base(extra_opts=extra_opts)
 
     if conda:
+      import subprocess
+      fpath = os.path.join('modules','cctbx_project','libtbx','auto_build','conda_installer.sh')
+      subprocess.call([fpath,"--install-miniconda"])
       extra_opts = ["--nproc=%s" % str(self.nproc)]
       if enable_shared:
         extra_opts.append("--python-shared")
@@ -1543,7 +1546,7 @@ class Builder(object):
     self.add_step(self.shell(name='base', command=command, workdir=['.']))
 
   def add_conda(self, extra_opts=[]):
-    """Build the base dependencies, e.g. Python, HDF5, etc. using conda"""
+    """Build the base dependencies, e.g. Python, HDF5, etc. using CONDA"""
     if self.with_python:
       extra_opts = ['--with-python', self.with_python]
     if self.verbose:
