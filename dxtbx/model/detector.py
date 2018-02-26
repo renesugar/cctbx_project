@@ -408,6 +408,7 @@ class DetectorFactory:
     '''
     from dxtbx.model.detector_helpers import set_detector_distance
     from dxtbx.model.detector_helpers import set_mosflm_beam_centre
+    from dxtbx.model.detector_helpers import set_slow_fast_beam_centre_mm
 
     # Check the input. If no reference detector is provided then
     # Create the detector model from scratch from the parameters
@@ -430,16 +431,21 @@ class DetectorFactory:
 
     # If the slow fast beam centre is set then update
     if params.detector.slow_fast_beam_centre is not None:
-      assert beam is not None
-      beam_s, beam_f = params.detector.slow_fast_beam_centre[0:2]
-      pnl = 0
+      panel_id = 0
       if len(params.detector.slow_fast_beam_centre) > 2:
-        pnl = params.detector.slow_fast_beam_centre[2]
-      try:
-        p = detector[pnl]
-      except RuntimeError:
-        raise Sorry('Detector does not have panel index {0}'.format(pnl))
-      beam.set_unit_s0(p.get_pixel_lab_coord((beam_f, beam_s)))
+        panel_id = params.detector.slow_fast_beam_centre[2]
+      if panel_id >= len(detector):
+        raise Sorry('Detector does not have panel index {0}'.format(panel_id))
+      px_size_f, px_size_s = detector[0].get_pixel_size()
+      slow_fast_beam_centre_mm = (
+          params.detector.slow_fast_beam_centre[0] * px_size_s,
+          params.detector.slow_fast_beam_centre[1] * px_size_f)
+      assert beam is not None
+      set_slow_fast_beam_centre_mm(
+        detector,
+        beam,
+        slow_fast_beam_centre_mm,
+        panel_id=panel_id)
 
     # Return the model
     return detector

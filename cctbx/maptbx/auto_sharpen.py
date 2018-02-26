@@ -547,7 +547,8 @@ master_phil = iotbx.phil.parse("""
        .short_caption = Region weighting
        .help = Region weighting in adjusted surface area calculation.\
             Score is surface area minus region_weight times number of regions.\
-            Default is 20. A smaller value will give more sharpening.
+            Default is set automatically.  \
+            A smaller value will give more sharpening.
 
      sa_percent = None
        .type = float
@@ -686,6 +687,7 @@ def set_sharpen_params(params,out=sys.stdout):
      print >>out,"Set optimize_k_sharpen=False as neither b_iso_to_d_cut nor"+\
          " b_iso are used"
      params.map_modification.optimize_k_sharpen=False
+
   return params
 
 
@@ -778,6 +780,12 @@ def get_map_and_model(params=None,
 
   if params.crystal_info.resolution is None:
     raise Sorry("Need resolution if map is supplied")
+
+  if params.crystal_info.resolution >= 10:
+    print >>out,"\n** WARNING: auto_sharpen is designed for maps at a "+\
+      "resolution of about 4.5 A\nor better.  Sharpening may be"+\
+      "poor at %7.0f A" %(resolution)
+
 
   if params.input_files.pdb_file and not pdb_inp: # get model
     model_file=params.input_files.pdb_file

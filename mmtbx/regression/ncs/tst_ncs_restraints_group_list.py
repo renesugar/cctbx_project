@@ -1,11 +1,9 @@
 from __future__ import division
 
-from mmtbx.ncs.ncs_search import is_same_transform
 from scitbx.array_family import flex
 from scitbx import matrix
 import iotbx.ncs as ncs
 import iotbx.pdb
-import math
 from iotbx.ncs import ncs_group_master_phil
 import iotbx.phil
 from time import time
@@ -97,51 +95,12 @@ ncs_group {
 }
 '''
 
-class commons(object):
-  def __init__(self):
-    # set_test_matrix
-    self.rot1 = flex.vec3_double([
-      (-0.317946, -0.173437, 0.932111),
-      ( 0.760735, -0.633422, 0.141629),
-      ( 0.565855,  0.754120, 0.333333)])
-    self.rot2 = flex.vec3_double([
-      (0       ,  0       , 1),
-      (0.784042, -0.620708, 0),
-      (0.620708,  0.784042, 0)])
-    self.rot3 = flex.vec3_double([
-      ( 0       ,  0       , -1),
-      ( 0.097445, -0.995241,  0),
-      (-0.995241, -0.097445,  0)])
-    # Angles for rot, in radians
-    self.rot_angles1 = flex.double(
-      (-0.4017753, 1.2001985, 2.6422171))
-    self.rot_angles2 = flex.double(
-      (-0.4017753, math.pi/2, 2.6422171))
-    self.rot_angles3 = flex.double(
-      (-0.4017753, -math.pi/2, 2.6422171))
-    self.rot_angles1_deg = flex.double(
-      (-0.4017753, 1.2001985, 2.6422171)) * 180/math.pi
-    self.rotation1 = matrix.sqr(self.rot1.as_double())
-    self.rotation2 = matrix.sqr(self.rot2.as_double())
-    self.rotation3 = matrix.sqr(self.rot3.as_double())
-    self.translation1 = matrix.rec((0.5,-0.5,0),(3,1))
-    self.translation2 = matrix.rec((0,0,0),(3,1))
-    self.translation3 = matrix.rec((0,1,2),(3,1))
-    self.r_t = [[self.rotation1, self.translation1],
-                [self.rotation2, self.translation2],
-                [self.rotation3, self.translation3]]
-
-    self.pdb_inp = iotbx.pdb.input(source_info=None, lines=test_pdb_str)
-    self.tr_obj1 = ncs.input(
-      hierarchy=self.pdb_inp.construct_hierarchy(),
-      rotations=[self.rotation1,self.rotation2],
-      translations=[self.translation1,self.translation2])
-    self.tr_obj2 = ncs.input(
-      hierarchy=self.pdb_inp.construct_hierarchy(),
-      rotations=[self.rotation1,self.rotation2,self.rotation3],
-      translations=[self.translation1,self.translation2,self.translation3])
-    self.ncs_restraints_group_list = \
-      self.tr_obj1.get_ncs_restraints_group_list()
+phil_str2 = '''\
+ncs_group {
+  reference = chain 'Aa' or chain 'Ab'
+  selection = chain 'Ae' or chain 'Af'
+}
+'''
 
 def test_transform_update():
   """ Test update of rotation and translation using selection """
@@ -167,8 +126,10 @@ def test_transform_update():
   r2_n = nrgl[0].copies[1].r
   t2_n = nrgl[0].copies[1].t
   #
-  assert is_same_transform(r1,t1,r1_n,t1_n)
-  assert is_same_transform(r2,t2,r2_n,t2_n)
+  assert approx_equal(r1, r1_n, eps=0.001)
+  assert approx_equal(t1, t1_n, eps=0.1)
+  assert approx_equal(r2, r2_n, eps=0.001)
+  assert approx_equal(t2, t2_n, eps=0.1)
 
 def test_check_for_max_rmsd():
   """ Test that ncs_restraints_group_list test is working properly """
@@ -193,24 +154,30 @@ def test_center_of_coordinates_shift():
   master ncs copy
   """
   # print sys._getframe().f_code.co_name
-  c = commons()
-  ncs_restraints_group_list = c.ncs_restraints_group_list
-  xrs = c.pdb_inp.xray_structure_simple()
+  # c = commons()
+
+  pdb_inp = iotbx.pdb.input(source_info=None, lines=test_pdb_str_2)
+  ncs_obj_phil = ncs.input(
+      hierarchy=pdb_inp.construct_hierarchy())
+  ncs_restraints_group_list = ncs_obj_phil.get_ncs_restraints_group_list()
+
+  # ncs_restraints_group_list = c.ncs_restraints_group_list
+  xrs = pdb_inp.xray_structure_simple()
   shifts = ncs_restraints_group_list.get_ncs_groups_centers(
     sites_cart = xrs.sites_cart())
 
-  xyz = c.pdb_inp.atoms().extract_xyz()
+  xyz = pdb_inp.atoms().extract_xyz()
   center_of_coor = (flex.vec3_double([xyz.sum()]) * (1/xyz.size())).round(8)
   # test shifts
   t1 = shifts[0].round(8)
   t2 = shifts[1].round(8)
   d1 = flex.sqrt((center_of_coor-t1).dot()).min_max_mean().as_tuple()
   d2 = flex.sqrt((center_of_coor-t2).dot()).min_max_mean().as_tuple()
-  assert (d1 == d2) and (d1 == (0,0,0))
+  assert (d1 == d2)
 
   # test shift to center
   new_nrg = ncs_restraints_group_list.shift_translation_to_center(shifts = shifts)
-  expected = (-4.62169, -5.42257, 5.288)
+  expected = (22.63275, 5.54625, 2.9375)
   assert (new_nrg[0].copies[0].t.round(5)).elems == expected
   # back to original coordinates system
   old_nrg = new_nrg.shift_translation_back_to_place(shifts=shifts)
@@ -223,11 +190,16 @@ def test_ncs_selection():
   verify that extended_ncs_selection, which include the master ncs copy and
   the portion of the protein we want to refine.
   """
-  c = commons()
+  pdb_inp = iotbx.pdb.input(source_info=None, lines=test_pdb_str_2)
+  ncs_obj_phil = ncs.input(
+      hierarchy=pdb_inp.construct_hierarchy())
+  ncs_restraints_group_list = ncs_obj_phil.get_ncs_restraints_group_list()
+  # ncs_restraints_group_list._show()
   refine_selection = flex.size_t(range(30))
-  result = c.ncs_restraints_group_list.get_extended_ncs_selection(
+  result = ncs_restraints_group_list.get_extended_ncs_selection(
       refine_selection=refine_selection)
-  expected = [0, 1, 2, 3, 4, 5, 6, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+  # print list(result)
+  expected = [0, 1, 2, 3, 4, 5, 6, 7, 24, 25, 26, 27, 28, 29]
   assert list(result) == expected
 
 def test_whole_group_iselection():
@@ -246,30 +218,80 @@ def test_whole_group_iselection():
   expected = [0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19]
   assert list(isel) == expected
 
-def test_concatenate_rot_tran():
-  """ Verify correct concatenation of rotation and translations """
-  c = commons()
-  results = c.ncs_restraints_group_list.concatenate_rot_tran()
-  expected = flex.double([
-    -0.40177529, 1.20019851, 2.64221706, 0.5, -0.5, 0.0,
-    2.24044161,  1.57079633, 0.0,        0.0,  0.0, 0.0])
-  assert approx_equal(results,expected,1.0e-4)
-
-def test_update_rot_tran():
+def test_selection():
   """
-  Verify correct conversion from angles and translation
-  to rotation matrices and translations """
-  # print sys._getframe().f_code.co_name
-  c = commons()
-  rot_results, tran_results = c.ncs_restraints_group_list.get_rotation_translation_as_list()
+  test that a atom selection propagates correctly to ncs_restraints_group_list
+  """
+  pdb_inp = iotbx.pdb.input(source_info=None, lines=pdb_answer_0)
+  ncs_obj_phil = ncs.input(
+      hierarchy=pdb_inp.construct_hierarchy())
+  nrg = ncs_obj_phil.get_ncs_restraints_group_list()
 
-  x = flex.double([
-    -0.40177529, 1.20019851, 2.64221706, 0.5, -0.5, 0.0,
-    2.24044161,  1.57079633, 0.0,        0.0,  0.0, 0.0])
-  rot_expected = [c.rotation1, c.rotation2]
-  tran_expected = [c.translation1,c.translation2]
-  assert approx_equal(tran_results,tran_expected,1.0e-4)
-  assert approx_equal(rot_results,rot_expected,1.0e-4)
+  m1 = list(nrg[0].master_iselection)
+  c1 = list(nrg[0].copies[0].iselection)
+  c2 = list(nrg[0].copies[1].iselection)
+
+  assert len(m1) == len(c1)  #                                           renumbering
+  assert m1 == [0,   1,  2,  3,  4,  5,  6] #   0,  1, X,  3, X,  5, X | 0, 1, 3
+  assert c1 == [7,   8,  9, 10, 11, 12, 13] #   7,  8, 9,  X, X, 12, X | 4, 5, 7
+  assert c2 == [14, 15, 16, 17, 18, 19, 20] #  14, 15, X, 17, X, 19, X | 8, 9, 11
+
+  selection1 = flex.size_t([0,1,5,3,100,101])
+  selection2 = flex.size_t([0,1,5,3,7,8,9,12,100,101])
+  selection3 = flex.size_t([0,1,5,3,7,8,9,12,14,15,19,17,100,101])
+  # gone iseqs for selection3: 2,4,6,10,11,13,16,18,20-99
+
+  new_nrg = nrg.select(flex.bool(102, selection1))
+  # only atoms in master are selected
+  mt = list(new_nrg[0].master_iselection)
+  c1t = list(new_nrg[0].copies[0].iselection)
+
+  assert mt == []
+  assert c1t == []
+
+  # atoms selected in both master and copies
+  new_nrg = nrg.select(flex.bool(102, selection2))
+  # only atoms in master are selected
+  mt = list(new_nrg[0].master_iselection)
+  c1t = list(new_nrg[0].copies[0].iselection)
+
+  assert mt == []
+  assert c1t == []
+
+  new_nrg = nrg.select(flex.bool(102, selection3))
+  # only atoms in master are selected
+  mt = list(new_nrg[0].master_iselection)
+  c1t = list(new_nrg[0].copies[0].iselection)
+  c2t = list(new_nrg[0].copies[1].iselection)
+
+  assert mt == [0, 1, 3], list(mt)
+  assert c1t == [4, 5, 7], list(c1t)
+  assert c2t == [8, 9, 11], list(c2t)
+
+def test_split_by_chain():
+  phil_groups = ncs_group_master_phil.fetch(
+      iotbx.phil.parse(phil_str2)).extract()
+  pdb_inp = iotbx.pdb.input(source_info=None, lines=test_pdb_str_2)
+  pars = ncs.input.get_default_params()
+  pars.ncs_search.chain_max_rmsd = 100
+  h = pdb_inp.construct_hierarchy()
+  ncs_obj_phil = ncs.input(
+      hierarchy=h,
+      ncs_phil_groups=phil_groups.ncs_group,
+      params=pars.ncs_search)
+  nrgl = ncs_obj_phil.get_ncs_restraints_group_list()
+  assert nrgl.get_array_of_str_selections() == \
+      [["chain 'Aa' or chain 'Ab'", "chain 'Ae' or chain 'Af'"]]
+  splitted_nrgl = nrgl.split_by_chains(hierarchy=h)
+  assert splitted_nrgl.get_n_groups() == 2
+  for g in splitted_nrgl:
+    assert g.get_number_of_copies() == 1
+    assert approx_equal(g.copies[0].r, nrgl[0].copies[0].r)
+    assert approx_equal(g.copies[0].t, nrgl[0].copies[0].t)
+  splitted_nrgl.update_str_selections_if_needed(hierarchy=h)
+  assert splitted_nrgl.get_array_of_str_selections() == \
+     [["chain 'Aa'", "chain 'Ae'"], ["chain 'Ab'", "chain 'Af'"]]
+
 
 def run_tests():
   test_transform_update()
@@ -277,8 +299,8 @@ def run_tests():
   test_center_of_coordinates_shift()
   test_ncs_selection()
   test_whole_group_iselection()
-  test_concatenate_rot_tran()
-  test_update_rot_tran()
+  test_selection()
+  test_split_by_chain()
 
 if __name__=='__main__':
   t0 = time()

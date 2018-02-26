@@ -42,7 +42,7 @@ def get_pypi_package_information(package, version=None, information_only=False):
   return package
 
 DEPENDENCIES_BASE = "https://cdn.rawgit.com/dials/dependencies/master/"
-OPENSSL_PKG = "openssl-1.0.2m.tar.gz"    # OpenSSL
+OPENSSL_PKG = "openssl-1.0.2n.tar.gz"    # OpenSSL
 PYTHON3_PKG = "Python-3.6.3.tgz"
 
 # from CCI
@@ -57,7 +57,7 @@ IPYTHON_PKG = "ipython-3.2.1.tar.gz"     # IPython
 LIBSVM_PKG = "libsvm-3.17_cci.tar.gz"
 
 # from PyPi
-CYTHON_VERSION="0.22"
+CYTHON_VERSION="0.27.3"
 DOCUTILS_VERSION="0.12"
 FUTURE_VERSION="0.16"
 JINJA2_VERSION = "2.9.6"
@@ -66,9 +66,10 @@ MOCK_VERSION="2.0.0"
 NUMPY_VERSION="1.8.2"
 NUMPYDOC_VERSION="0.5" # related to Sphinx (not numpy) for documentation
 PILLOW_VERSION = "4.2.1"
-PYTEST_VERSION="3.2.3"
+PYTEST_VERSION="3.4.1"
 SIX_VERSION="1.11.0"
-SPHINX_VERSION="1.4.4" # for documentation
+SPHINX_VERSION="1.4.9" # for documentation
+MPI4PY_VERSION="3.0.0"
 
 # HDF5
 BASE_HDF5_PKG_URL = "https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.10/hdf5-1.10.1/src/"
@@ -156,11 +157,17 @@ subversion_repositories = {
 # command line parameters
 git_repositories = {
   # lz4 and bitshuffle compressions for HDF5
-  "hdf5_lz4": ['git@github.com:dectris/HDF5Plugin.git',
-               'https://github.com/dectris/HDF5Plugin.git',
+  # The git repositories are disabled for both on purpose.
+  # Reason: Repositories are deprecated and unlikely to change ever again.
+  #         We currently patch the local copies of the repositories, which means
+  #         that if they are cloned git repositories you cannot run bootstrap on
+  #         them again without bootstrap detecting uncommitted changes and
+  #         stopping with an error message.
+  "hdf5_lz4": [#'git@github.com:dectris/HDF5Plugin.git',
+               #'https://github.com/dectris/HDF5Plugin.git',
                'https://github.com/dectris/HDF5Plugin/archive/master.zip'],
-  "bitshuffle": ['git@github.com:kiyo-masui/bitshuffle.git',
-                 'https://github.com/kiyo-masui/bitshuffle.git',
+  "bitshuffle": [#'git@github.com:kiyo-masui/bitshuffle.git',
+                 #'https://github.com/kiyo-masui/bitshuffle.git',
                  'https://github.com/kiyo-masui/bitshuffle/archive/master.zip'],
 }
 

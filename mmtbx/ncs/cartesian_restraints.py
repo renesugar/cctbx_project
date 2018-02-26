@@ -22,14 +22,14 @@ class cartesian_ncs_manager(object):
     # create bunch of group objects
     self.ncs_params = ncs_params
     if self.ncs_params is None:
-      self.ncs_params = global_ncs_params.extract()
+      self.ncs_params = global_ncs_params.extract().ncs
     if ext_groups is not None:
       self.groups_list = ext_groups
     else:
       self.groups_list = []
       ncs_obj = model.get_ncs_obj()
-      ncs_groups_selection_string_list = ncs_obj.get_array_of_selections()
       ncs_restraints_group_list = ncs_obj.get_ncs_restraints_group_list()
+      ncs_groups_selection_string_list = ncs_restraints_group_list.get_array_of_str_selections()
       for i_gr, gr in enumerate(ncs_restraints_group_list):
         n_copies = gr.get_number_of_copies()
         registry = pair_registry(n_seq=model.get_number_of_atoms(), n_ncs=n_copies+1)

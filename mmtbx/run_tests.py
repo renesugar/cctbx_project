@@ -73,7 +73,6 @@ tst_list = (
   "$D/regression/ncs/tst_ncs_search.py",
   "$D/regression/ncs/tst_ncs_search_flips.py",
   "$D/regression/ncs/tst_restraints.py",
-  "$D/regression/ncs/tst_asu_as_one_ncs_copy.py",
   "$D/regression/ncs/tst_geometry_minimization_ncs_constraints.py",
   "$D/regression/tst_geometry_minimization.py",
   ["$D/ncs/ncs.py", "exercise"],
@@ -144,7 +143,6 @@ tst_list = (
   "$D/bulk_solvent/tst_aniso_scaler.py",
   "$D/bulk_solvent/tst_kb_sol_u_star_fd.py",
   #
-  "$D/alignment.py",
   "$D/invariant_domain.py",
   # restraints
   "$D/regression/tst_psi_phi_extraction.py",

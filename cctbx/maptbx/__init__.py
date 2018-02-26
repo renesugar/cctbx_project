@@ -20,6 +20,7 @@ from cctbx import adptbx
 from libtbx import group_args
 from scitbx import fftpack
 from libtbx.test_utils import approx_equal
+from cctbx import uctbx
 
 debug_peak_cluster_analysis = os.environ.get(
   "CCTBX_MAPTBX_DEBUG_PEAK_CLUSTER_ANALYSIS", "")
@@ -83,31 +84,48 @@ def smooth_map(map, crystal_symmetry, rad_smooth, method="exp"):
   return map_smooth
 
 class d99(object):
-  def __init__(self, map, crystal_symmetry):
+  def __init__(self, map=None, f_map=None, crystal_symmetry=None):
     adopt_init_args(self, locals())
-    map = shift_origin_if_needed(map_data=map).map_data
-    from cctbx import miller
-    self.f = miller.structure_factor_box_from_map(
-      map = map, crystal_symmetry = crystal_symmetry)
-    self.d_spacings = self.f.d_spacings().data()
+    if(map is not None):
+      assert f_map is None
+      assert crystal_symmetry is not None
+      map = shift_origin_if_needed(map_data=map).map_data
+      from cctbx import miller
+      self.f_map = miller.structure_factor_box_from_map(
+        map = map, crystal_symmetry = crystal_symmetry)
+    else:
+      assert [map, crystal_symmetry].count(None)==2
+    self.d_spacings = self.f_map.d_spacings().data()
+    s = flex.sort_permutation(self.d_spacings)
+    self.d_spacings = self.d_spacings.select(s)
+    self.f_map = self.f_map.select(s)
     self.d_max, self.d_min = flex.max(self.d_spacings), flex.min(self.d_spacings)
     o = ext.d99(
-      f          = self.f.data(),
+      f          = self.f_map.data(),
       d_spacings = self.d_spacings,
-      hkl        = self.f.indices(),
+      hkl        = self.f_map.indices(),
       d_min      = self.d_min,
       d_max      = self.d_max)
     self.result = group_args(
-      d9     = o.d_min_cc9(),
-      d99    = o.d_min_cc99(),
-      d999   = o.d_min_cc999(),
-      ccs    = o.ccs(),
-      d_mins = o.d_mins())
+      d9      = o.d_min_cc9(),
+      d99     = o.d_min_cc99(),
+      d999    = o.d_min_cc999(),
+      d9999   = o.d_min_cc9999(),
+      d99999  = o.d_min_cc99999(),
+      d999999 = o.d_min_cc999999())
 
   def show(self, log):
     fmt = "%12.6f %8.6f"
     for d_min, cc in zip(self.result.d_mins, self.result.ccs):
       print >> log, fmt%(d_min, cc)
+
+def assert_same_gridding(map_1, map_2,
+                         Sorry_message="Maps have different gridding."):
+  f1 = map_1.focus()==map_2.focus()
+  f2 = map_1.origin()==map_2.origin()
+  f3 = map_1.all()==map_2.all()
+  if([f1,f2,f3].count(True)!=3):
+    raise Sorry(Sorry_message)
 
 def shift_origin_if_needed(map_data, sites_cart=None, crystal_symmetry=None):
   shift_needed = not \
@@ -145,6 +163,7 @@ flex.double.eight_point_interpolation_with_gradients = \
 flex.double.quadratic_interpolation_with_gradients = \
   quadratic_interpolation_with_gradients
 flex.double.tricubic_interpolation = tricubic_interpolation
+flex.double.tricubic_interpolation_with_gradients = tricubic_interpolation_with_gradients
 
 def cc_peak(cutoff, map_1=None,map_2=None, map_coeffs_1=None,map_coeffs_2=None):
   """
@@ -1223,6 +1242,10 @@ class positivity_constrained_density_modification(object):
     y = abs(y).data()
     assert approx_equal(x, y)
 
+def d_min_corner(map_data, unit_cell):
+  max_index = flex.miller_index( [[(i-1)//2 for i in map_data.all()]] )
+  return uctbx.d_star_sq_as_d(unit_cell.max_d_star_sq( max_index ))
+
 def d_min_from_map(map_data, unit_cell, resolution_factor=1./2.):
   a,b,c = unit_cell.parameters()[:3]
   nx,ny,nz = map_data.all()
@@ -1322,6 +1345,13 @@ Fourier image of specified resolution, etc.
     xrs = xray.structure(sp, scatterers)
     xrs.scattering_type_registry(table = self.scattering_table)
     return xrs
+
+  def exact_density_at_r(self, r, b_iso):
+    return self.scr.gaussian(self.scattering_type).electron_density(r, b_iso)
+
+  def exact_gradient_at_r(self, r, t, t0, b_iso):
+    return self.scr.gaussian(self.scattering_type).gradient(r=r, t=t, t0=t0,
+      b_iso=b_iso)
 
   def exact_density(self, b_iso, radius_max=5., radius_step=0.001):
     r = 0.0

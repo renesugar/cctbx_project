@@ -32,16 +32,25 @@ import logging
 
 # =============================================================================
 class ProgramTemplate(object):
-  # Class variables
+  # Class variables for customizing program
 
   # description of the program
   description = '''
 Program Description
 '''
 
+  # datatypes for program
+  # see libtbx/data_manager/<datatype>.py for list of supported datatypes
+  # default datatypes are set in libtbx/data_manager/__init__.py
+  datatypes = None
+
   # master PHIL string for the program (required)
   master_phil_str = '''
-program {}
+# example
+program {
+  parameter = None
+    .type = bool
+}
 '''
 
   # unique citations for the program. list of citation phil extract objects
@@ -56,6 +65,19 @@ program {}
   epilog = '''
 For additional help, you can contact the developers at cctbx@cci.lbl.gov
 
+'''
+
+  # ---------------------------------------------------------------------------
+  # Reserved phil scope for output
+  # this will be automatically added to the master_phil_str
+  # you should add your own output phil scope, but these parameters will be
+  # automatically added, so no need to redefine
+  output_phil_str = '''
+output {
+  overwrite = False
+    .type = bool
+    .help = Overwrite files when set to True
+}
 '''
 
   # ---------------------------------------------------------------------------

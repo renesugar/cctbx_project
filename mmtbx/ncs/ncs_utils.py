@@ -3,7 +3,6 @@ from scitbx.array_family import flex
 from scitbx import matrix
 import scitbx.rigid_body
 from cctbx import xray
-import string
 import random
 import math
 import mmtbx.monomer_library.server
@@ -35,23 +34,6 @@ def flip_atoms_in_ncs_groups(hierarchy, ncs_restraints_group_list, mon_lib_srv=N
           # print "working on ", r_m.id_str(), r_c.id_str()
           if should_be_flipped(r_m, r_c):
             flip_residue(r_c, mon_lib_srv)
-
-def update_transforms(transforms_obj,rm,tv):
-  """
-  XXX
-  XXX Consider removing it. Only used in
-  XXX mmtbx/regression/ncs/tst_minimization_ncs_constraints_real_space.py
-  XXX Warning: transforms_obj here is iotbx.ncs.input() class
-  XXX
-
-  Update transforms_obj with the rotation matrices (rm) and translation
-  vectors (tv) """
-  assert len(transforms_obj.transform_order) == len(rm)
-  assert len(rm) == len(tv)
-  for tr,r,t in zip(transforms_obj.transform_order,rm,tv):
-    transforms_obj.ncs_transform[tr].r = r
-    transforms_obj.ncs_transform[tr].t = t
-  return transforms_obj
 
 def rotation_to_angles(rotation, deg=False):
   """
@@ -188,50 +170,6 @@ def compute_transform_grad(grad_wrt_xyz,
       g.extend(grad_wrt_t)
       i += 1
   return flex.double(g)
-
-def get_ncs_sites_cart(ncs_obj=None,
-                       fmodel=None,
-                       xray_structure=None,
-                       sites_cart=None,
-                       extended_ncs_selection=None):
-  """
-  XXX The same name of the function as in cctbx/maptbx/segment_and_split_map.py
-  XXX The only call is from minimization_ncs_constraints.py, passing whole
-  XXX lbfgs class as 'ncs_obj'!
-  XXX TODO: remove ncs_obj parameter, pass everything needed explicitly
-  XXX not yet clear the goal of this func
-  XXX
-
-  Args::
-    ncs_obj: an object that contains fmodel, sites_cart or xray_structure
-      and an atom selection flags for a single NCS copy.
-
-  Returns:
-    (flex.vec3): coordinate sites cart of the single NCS copy
-  """
-  if ncs_obj:
-    if hasattr(ncs_obj, 'extended_ncs_selection'):
-      extended_ncs_selection = ncs_obj.extended_ncs_selection
-    else:
-      assert extended_ncs_selection
-    if hasattr(ncs_obj, 'sites_cart'):
-      return ncs_obj.sites_cart().select(extended_ncs_selection)
-    elif hasattr(ncs_obj, 'fmodel'):
-      xrs_one_ncs = ncs_obj.fmodel.xray_structure.select(extended_ncs_selection)
-      return xrs_one_ncs.sites_cart()
-    elif  hasattr(ncs_obj, 'xray_structure') or xray_structure:
-      xrs_one_ncs = ncs_obj.xray_structure.sites_cart()
-      return xrs_one_ncs.select(extended_ncs_selection)
-  else:
-    if sites_cart:
-      return sites_cart().select(extended_ncs_selection)
-    elif fmodel:
-      xrs_one_ncs = fmodel.xray_structure.select(extended_ncs_selection)
-      return xrs_one_ncs.sites_cart()
-    elif  xray_structure:
-      xrs_one_ncs = xray_structure.sites_cart()
-      return xrs_one_ncs.select(extended_ncs_selection)
-
 
 def get_weight(fmodel=None,
                restraints_manager=None,
@@ -417,55 +355,6 @@ def apply_transforms(ncs_coordinates,
   else:
     return flex.vec3_double(asu_xyz)
 
-def ncs_groups_selection(ncs_restraints_group_list,selection):
-  """
-  XXX
-  XXX Move to iotbx/ncs/__init__.py, member func of class_ncs_restraints_group_list()
-  XXX Figure out difference between this and def select() there.
-  XXX
-
-  Modifies the selections of master and copies according the "selection"
-  - Keep the order of selected atoms
-  - Keep only atoms that appear in master and ALL copies
-  Also modify "selection" to include ncs related atoms only if selected in
-  both master and ALL ncs copies (The modified selection is not returned in
-  current version)
-
-  Args:
-    ncs_restraints_group_list (list): list of ncs_restraints_group objects
-    selection (flex.bool or flex.size_t): atom selection
-
-  Returns:
-    new_nrg_list (list): list of modified ncs_restraints_group objects
-  """
-  if isinstance(selection,flex.bool): selection = selection.iselection(True)
-  sel_set = set(selection)
-  new_nrg_list = ncs_restraints_group_list.deep_copy()
-  # check what are the selection that shows in both master and all copies
-  for nrg in new_nrg_list:
-    m = set(nrg.master_iselection)
-    m_list = [(pos,indx) for pos,indx in enumerate(list(nrg.master_iselection))]
-    m_in_sel = m.intersection(sel_set)
-    common_selection_pos = {pos for (pos,indx) in m_list if indx in m_in_sel}
-    for ncs in nrg.copies:
-      c = set(ncs.iselection)
-      c_list = [(pos,indx) for pos,indx in enumerate(list(ncs.iselection))]
-      copy_in_sel = c.intersection(sel_set)
-      include_set = {pos for (pos,indx) in c_list if indx in copy_in_sel}
-      common_selection_pos.intersection_update(include_set)
-      if not bool(common_selection_pos): break
-    # use the common_selection_pos to update all selections
-    nrg.master_iselection, not_included = selected_positions(
-      nrg.master_iselection,common_selection_pos)
-    selection = remove_items_from_selection(selection,not_included)
-    for ncs in nrg.copies:
-      ncs.iselection, not_included = selected_positions(
-        ncs.iselection,common_selection_pos)
-      selection = remove_items_from_selection(selection,not_included)
-
-  return new_nrg_list
-
-
 def selected_positions(selection,positions):
   """
   Returns only the selected indices in the positions specified in "positions"
@@ -562,43 +451,3 @@ def get_refine_selection(refine_selection=None,number_of_atoms=None):
       selection_list = range(number_of_atoms)
       refine_selection = flex.size_t(selection_list)
   return refine_selection
-
-def make_unique_chain_names(unique_chain_names,number_of_names=1):
-  """
-  XXX
-  XXX Consider removing, unifying with iotbx.pdb.utils.all_chain_ids
-  XXX
-
-  Produce a sorted list of new unique chain names.
-  Chain names are strings of one or two characters long.
-
-  Args:
-    unique_chain_names (set): Current names
-    number_of_names (int): number of new names
-
-  Returns:
-    new_names_list (list): sorted list on new names
-  """
-  # check availability of one letter chain names
-  chr_list1 = list(set(string.ascii_uppercase) - set(unique_chain_names))
-  chr_list2 = list(set(string.ascii_lowercase) - set(unique_chain_names))
-  chr_list1.sort()
-  chr_list2.sort()
-  new_names_list = chr_list1 + chr_list2
-  if len(new_names_list) < number_of_names:
-    # calc how many more chain names we need
-    n_names =  number_of_names - len(new_names_list)
-    # the number of character needed to produce new names
-    chr_number = int(math.sqrt(n_names)) + 1
-    # build character list
-    chr_list = list(string.ascii_uppercase) + \
-               list(string.ascii_lowercase) + \
-               list(string.digits)
-    # take only as many characters as needed
-    chr_list = chr_list[:chr_number]
-    extra_names = set([ x+y for x in chr_list for y in chr_list])
-    # make sure not using existing names
-    extra_names = list(extra_names - set(unique_chain_names))
-    extra_names.sort()
-    new_names_list.extend(extra_names)
-  return new_names_list[:number_of_names]

@@ -1,5 +1,5 @@
-#ifndef CCTBX_MAPTBX_EIGHT_POINT_INTERPOLATION_H
-#define CCTBX_MAPTBX_EIGHT_POINT_INTERPOLATION_H
+#ifndef CCTBX_MAPTBX_INTERPOLATION_H
+#define CCTBX_MAPTBX_INTERPOLATION_H
 
 #include <cctbx/coordinates.h>
 #include <scitbx/math/modulo.h>
@@ -152,7 +152,6 @@ namespace cctbx { namespace maptbx {
     return af::tiny<MapFloatType, 4>(result, gx,gy,gz);
   }
 
-  //----------------------------------------------------------------------------
   template <
     typename MapFloatType,
     typename SiteFloatType>
@@ -167,13 +166,7 @@ namespace cctbx { namespace maptbx {
     //typedef af::flex_grid<>::index_type index_t;
     typedef typename index_t::value_type iv_t;
     index_t const& grid_n = map.accessor().focus();
-
-    cctbx::fractional<> x_frac_mp = cctbx::fractional<>(x_frac).mod_positive();
-    get_corner<index_t, SiteFloatType> corner(grid_n, x_frac_mp);
-    //get_corner<index_t, SiteFloatType> corner(grid_n, x_frac);
-
-
-    //MapFloatType result = 0;
+    get_corner<index_t, SiteFloatType> corner(grid_n, x_frac);
     MapFloatType f_000, f_100, f_010, f_110, f_001, f_101, f_011, f_111;
     MapFloatType f_m100, f_0m10, f_00m1;
     MapFloatType f_200, f_020, f_002;
@@ -181,7 +174,6 @@ namespace cctbx { namespace maptbx {
     for(int s1=-1;s1<3;s1++) { int i1 = (corner.i_grid[1] + s1) % grid_n[1];
     for(int s2=-1;s2<3;s2++) { int i2 = (corner.i_grid[2] + s2) % grid_n[2];
       MapFloatType map_value = map(i0,i1,i2);
-      //result += map_value * corner.weight(s0,s1,s2);
       if(s0==0&&s1==0&&s2==0) f_000 = map_value;
       if(s0==1&&s1==0&&s2==0) f_100 = map_value;
       if(s0==0&&s1==1&&s2==0) f_010 = map_value;
@@ -200,25 +192,6 @@ namespace cctbx { namespace maptbx {
     MapFloatType x = corner.weights_[0][1];
     MapFloatType y = corner.weights_[1][1];
     MapFloatType z = corner.weights_[2][1];
-
-    MapFloatType f_x00 = (1-x)*f_000 + x*f_100;
-    MapFloatType f_x01 = (1-x)*f_001 + x*f_101;
-    MapFloatType f_0y0 = (1-y)*f_000 + y*f_010;
-    MapFloatType f_0y1 = (1-y)*f_001 + y*f_011;
-    MapFloatType f_x10 = (1-x)*f_010 + x*f_110;
-    MapFloatType f_x11 = (1-x)*f_011 + x*f_111;
-    MapFloatType f_1y0 = (1-y)*f_100 + y*f_110;
-    MapFloatType f_1y1 = (1-y)*f_101 + y*f_111;
-    MapFloatType f_xy0 = (1-y)*f_x00 + y*f_x10;
-    MapFloatType f_x0z = (1-z)*f_x00 + z*f_x01;
-    MapFloatType f_0yz = (1-z)*f_0y0 + z*f_0y1;
-    MapFloatType f_xy1 = (1-y)*f_x01 + y*f_x11;
-    MapFloatType f_x1z = (1-z)*f_x10 + z*f_x11;
-    MapFloatType f_1yz = (1-z)*f_1y0 + z*f_1y1;
-
-    //std::cout<<"LOOK: "<<((1-z)*f_xy0+z*f_xy1)<<std::endl;
-    //std::cout<<"result: "<<result<<std::endl;
-
     MapFloatType t = (f_111+f_100+f_010+f_001-f_011-f_110-f_101-f_000) / 8;
     MapFloatType f_000_bar = f_000-t;
     MapFloatType f_100_bar = f_100-t;
@@ -233,9 +206,6 @@ namespace cctbx { namespace maptbx {
     MapFloatType axz = (f_101_bar+f_000_bar-f_100_bar-f_001_bar)/2;
     MapFloatType c = f_000_bar;
     MapFloatType axx,ayy,azz, bx,by,bz;
-    //x=x_frac_mp[0]; // overwrite previous
-    //y=x_frac_mp[1]; // overwrite previous
-    //z=x_frac_mp[2]; // overwrite previous
     if(x>=0 && x<0.5) {
       axx = (f_100_bar-2*f_000_bar+f_m100)/2;
       bx  = (f_100_bar-f_m100)/2;
@@ -244,7 +214,6 @@ namespace cctbx { namespace maptbx {
       axx = (f_200-2*f_100_bar+f_000_bar)/2;
       bx  = (4*f_100_bar-f_200-3*f_000_bar)/2;
     }
-
     if(y>=0 && y<0.5) {
       ayy = (f_010_bar-2*f_000+f_0m10)/2;
       by  = (f_010_bar-f_0m10)/2;
@@ -253,16 +222,14 @@ namespace cctbx { namespace maptbx {
       ayy = (f_020-2*f_010_bar+f_000_bar)/2;
       by  = (4*f_010_bar-f_020-3*f_000_bar)/2;
     }
-
     if(z>=0 && z<0.5) {
-      azz = (f_001_bar-2*f_000_bar+f_00m1);
+      azz = (f_001_bar-2*f_000_bar+f_00m1)/2.;
       bz  = (f_001_bar-f_00m1)/2;
     }
     else {
       azz = (f_002-2*f_001_bar+f_000_bar)/2;
       bz  = (4*f_001_bar-f_002-3*f_000_bar)/2;
     }
-
     MapFloatType result = axx*x*x +
                           ayy*y*y +
                           azz*z*z +
@@ -270,17 +237,11 @@ namespace cctbx { namespace maptbx {
                           2*axz*x*z +
                           2*ayz*y*z +
                           bx*x + by*y + bz*z + c;
-    //std::cout<<"axx,ayy,azz:"<<axx<<" "<<ayy<<" "<<azz<<std::endl;
-    //std::cout<<"axy,ayz,axz:"<<axy<<" "<<ayz<<" "<<axz<<std::endl;
-    //std::cout<<"bx,by,bz:"<<bx<<" "<<by<<" "<<bz<<std::endl;
-    //std::cout<<"c:"<<c<<std::endl;
-    //std::cout<<"result:"<<result<<std::endl;
     MapFloatType gx = (2*x*axx + 2*y*axy + 2*z*axz + bx) / step[0];
     MapFloatType gy = (2*x*axy + 2*y*ayy + 2*z*ayz + by) / step[1];
     MapFloatType gz = (2*x*axz + 2*y*ayz + 2*z*azz + bz) / step[2];
     return af::tiny<MapFloatType, 4>(result, gx,gy,gz);
   }
-  //----------------------------------------------------------------------------
 
   template <
     typename MapFloatType,
@@ -345,8 +306,146 @@ namespace cctbx { namespace maptbx {
     return result;
   }
 
-  // derived from http://www.paulinternet.nl/?page=bicubic
-  // also see: http://en.wikipedia.org/wiki/Tricubic_interpolation
+  template <typename FloatType>
+  FloatType
+  cubic(FloatType t, FloatType fm1, FloatType f0, FloatType f1, FloatType f2) {
+    FloatType a0 = f0;
+    FloatType a1 = (-1*f2+6*f1-3*f0-2*fm1)/6.;
+    FloatType a2 = (f1-2*f0+fm1)/2.;
+    FloatType a3 = (f2-3*f1+3*f0-fm1)/6.;
+    //
+    // Other option
+    //FloatType a0 = f0;
+    //FloatType a1 = (f1-fm1)/2.;
+    //FloatType a2 = (-1.*f2+4*f1-5*f0+2*fm1)/2.;
+    //FloatType a3 = (f2-3*f1+3*f0-fm1)/2.;
+    return a0 + t*(a1 + t*(a2 + a3*t));
+  }
+
+  template <typename FloatType>
+  FloatType
+  gcubic(FloatType t, FloatType fm1, FloatType f0, FloatType f1, FloatType f2) {
+    FloatType a1 = (-1*f2+6*f1-3*f0-2*fm1)/6.;
+    FloatType a2 = (f1-2*f0+fm1)/2.;
+    FloatType a3 = (f2-3*f1+3*f0-fm1)/6.;
+    //
+    // Other option
+    //FloatType a1 = (f1-fm1)/2.;
+    //FloatType a2 = (-1.*f2+4*f1-5*f0+2*fm1)/2.;
+    //FloatType a3 = (f2-3*f1+3*f0-fm1)/2.;
+    return a1 + t*(2*a2 + 3*a3*t);
+  }
+
+  template <typename FloatType>
+  FloatType
+  fxpq(FloatType f[4][4][4], FloatType x, int p, int q) {
+    p=p+1;
+    q=q+1;
+    return cubic(x, f[-1+1][p][q], f[0+1][p][q], f[1+1][p][q], f[2+1][p][q]);
+  }
+
+  template <typename FloatType>
+  FloatType
+  fqyp(FloatType f[4][4][4], FloatType y, int p, int q) {
+    p=p+1;
+    q=q+1;
+    return cubic(y, f[q][-1+1][p], f[q][0+1][p], f[q][1+1][p], f[q][2+1][p]);
+  }
+
+  template <typename FloatType>
+  FloatType
+  fpqz(FloatType f[4][4][4], FloatType z, int p, int q) {
+    p=p+1;
+    q=q+1;
+    return cubic(z, f[p][q][-1+1], f[p][q][0+1], f[p][q][1+1], f[p][q][2+1]);
+  }
+
+  template <typename FloatType>
+  FloatType
+  fxyq(FloatType f[4][4][4], FloatType x, FloatType y, int q) {
+    return cubic(
+      y,
+      fxpq(f, x, -1, q),
+      fxpq(f, x,  0, q),
+      fxpq(f, x,  1, q),
+      fxpq(f, x,  2, q));
+  }
+
+  template <typename FloatType>
+  FloatType
+  fqyz(FloatType f[4][4][4], FloatType y, FloatType z, int q) {
+    return cubic(
+      z,
+      fqyp(f, y, -1, q),
+      fqyp(f, y,  0, q),
+      fqyp(f, y,  1, q),
+      fqyp(f, y,  2, q));
+  }
+
+  template <typename FloatType>
+  FloatType
+  fxqz(FloatType f[4][4][4], FloatType x, FloatType z, int q) {
+    return cubic(
+      x,
+      fpqz(f, z, -1, q),
+      fpqz(f, z,  0, q),
+      fpqz(f, z,  1, q),
+      fpqz(f, z,  2, q));
+  }
+
+  template <
+  typename MapFloatType,
+  typename SiteFloatType>
+  af::tiny<MapFloatType, 4>
+  tricubic_interpolation_with_gradients(
+    af::const_ref<MapFloatType, af::c_grid_padded<3> > const& map,
+    scitbx::vec3<SiteFloatType> const& x_frac,
+    scitbx::vec3<SiteFloatType> const& step)
+  {
+    using namespace std;
+    typedef af::c_grid_padded<3>::index_type index_t;
+    typedef typename index_t::value_type iv_t;
+    index_t const& grid_n = map.accessor().focus();
+    get_corner<index_t, SiteFloatType> corner(grid_n, x_frac);
+    MapFloatType f[4][4][4];
+    for (int i = -1; i < 3; i++) {
+      iv_t u = (corner.i_grid[0] + i) % grid_n[0];
+      for (int j = -1; j < 3; j++) {
+        iv_t v = (corner.i_grid[1] + j) % grid_n[1];
+        for (int k = -1; k < 3; k++) {
+          iv_t w = (corner.i_grid[2] + k) % grid_n[2];
+          f[i+1][j+1][k+1] = map(u,v,w);
+        }
+      }
+    }
+    SiteFloatType x = corner.weights_[0][1];
+    SiteFloatType y = corner.weights_[1][1];
+    SiteFloatType z = corner.weights_[2][1];
+    // All three must be the same
+    // Comment out any two for performance
+    MapFloatType r0 = cubic<MapFloatType>(
+      z, fxyq(f, x,y,-1), fxyq(f, x,y,0),
+         fxyq(f, x,y,1),  fxyq(f, x,y,2));
+    //MapFloatType r1 = cubic<MapFloatType>(
+    //  x, fqyz(f, y,z,-1), fqyz(f, y,z,0),
+    //     fqyz(f, y,z,1),  fqyz(f, y,z,2));
+    //MapFloatType r2 = cubic<MapFloatType>(
+    //  y, fxqz(f, x,z,-1), fxqz(f, x,z,0),
+    //     fxqz(f, x,z,1),  fxqz(f, x,z,2));
+    //CCTBX_ASSERT(std::abs(r0-r2)<1.e-6);
+    //CCTBX_ASSERT(std::abs(r0-r1)<1.e-6);
+    MapFloatType gx = gcubic<MapFloatType>(
+      x, fqyz(f, y,z,-1), fqyz(f, y,z,0),
+         fqyz(f, y,z,1),  fqyz(f, y,z,2));
+    MapFloatType gy = gcubic<MapFloatType>(
+      y, fxqz(f, x,z,-1), fxqz(f, x,z,0),
+         fxqz(f, x,z,1),  fxqz(f, x,z,2));
+    MapFloatType gz = gcubic<MapFloatType>(
+      z, fxyq(f, x,y,-1), fxyq(f, x,y,0),
+         fxyq(f, x,y,1),  fxyq(f, x,y,2));
+    return af::tiny<MapFloatType, 4>(r0, gx/step[0],gy/step[1],gz/step[2]);
+  }
+
   template <
     typename MapFloatType,
     typename SiteFloatType>
@@ -531,4 +630,4 @@ namespace cctbx { namespace maptbx {
 
 }} // namespace cctbx::maptbx
 
-#endif // CCTBX_MAPTBX_EIGHT_POINT_INTERPOLATION_H
+#endif // CCTBX_MAPTBX_INTERPOLATION_H

@@ -1,21 +1,16 @@
-#!/usr/bin/env python
-#
-# nexus.py
-#
 #  Copyright (C) 2013 Diamond Light Source
-#
-#  Author: James Parkhurst
 #
 #  This code is distributed under the BSD license, a copy of which is
 #  included in the root directory of this package.
 
-
 from __future__ import absolute_import, division
+
+import os
+
 try:
   from dxtbx_format_nexus_ext import *
 except ImportError:
   # Workaround for psana build, which doesn't link HDF5 properly
-  import os
   if 'SIT_ROOT' not in os.environ:
     raise
 
@@ -227,12 +222,10 @@ def convert_units(value, input_units, output_units):
   raise RuntimeError('Can\'t convert units "%s" to "%s"' % (input_units, output_units))
 
 
-def visit_dependancies(nx_file, item, visitor = None):
+def visit_dependencies(nx_file, item, visitor = None):
   '''
   Walk the dependency chain and call a visitor function
-
   '''
-  import os.path
   dependency_chain = []
   if os.path.basename(item) == 'depends_on':
     depends_on = nx_file[item][()]
@@ -314,7 +307,7 @@ def construct_vector(nx_file, item, vector=None):
     pass
   visitor = TransformVisitor(vector)
 
-  visit_dependancies(nx_file, item, visitor)
+  visit_dependencies(nx_file, item, visitor)
 
   return visitor.result()
 
@@ -451,10 +444,6 @@ class NXdetector(object):
 
     # The items to validate
     items = {
-      "depends_on" : {
-        "minOccurs" : 1,
-        "checks" : []
-      },
       "data" : {
         "minOccurs" : 0,
         "checks" : [
@@ -972,7 +961,11 @@ def get_change_of_basis(transformation):
 
   if 'offset' in transformation.attrs:
     offset = n2i_cob * col(transformation.attrs['offset'])
-    offset = convert_units(offset, transformation.attrs['offset_units'], 'mm')
+    if 'offset_units' in transformation.attrs:
+      offset_units = transformation.attrs['offset_units']
+    else:
+      offset_units = units
+    offset = convert_units(offset, offset_units, 'mm')
   else:
     offset = col((0,0,0))
 
@@ -1011,7 +1004,6 @@ def get_depends_on_chain_using_equipment_components(transformation):
   skip the intermediate dependencies, listing only the first at each level.
 
   '''
-  import os
   chain = []
   current = transformation
 
@@ -1069,7 +1061,6 @@ class DetectorFactoryFromGroup(object):
     from cctbx.eltbx import attenuation_coefficient
     from dxtbx.model import ParallaxCorrectedPxMmStrategy
     from scitbx import matrix
-    import os
 
     if idx is None:
       idx = 0
@@ -1133,28 +1124,32 @@ class DetectorFactoryFromGroup(object):
       n_modules = len(modules)
       # depends_on field for a detector will have NxM entries in it, where
       # N = number of images and M = number of detector modules
-      assert len(nx_detector.handle['depends_on']) % n_modules == 0, "Couldn't find NXdetector_modules matching the list of dependencies for this detector"
 
       for module_number, nx_detector_module in enumerate(modules):
         # Get the depends_on starting point for this module and for this image
-        depends_on = nx_detector.handle[nx_detector.handle['depends_on'][(idx//n_modules)+module_number]]
         panel_name = str(os.path.basename(nx_detector_module.handle.name))
         px_fast = int(nx_detector_module.handle['data_size'][0])
         px_slow = int(nx_detector_module.handle['data_size'][1])
         image_size = px_fast, px_slow
-        fast_pixel_size = nx_detector_module.handle['fast_pixel_size'][()]
-        slow_pixel_size = nx_detector_module.handle['slow_pixel_size'][()]
-        pixel_size = fast_pixel_size, slow_pixel_size
-        # XXX no units for pixel size in nx example file, plus fast_pixel_size isn't a standardized NXdetector_module field
-        #fast_pixel_direction_units = fast_pixel_direction.attrs['units']
-        #fast_pixel_size = convert_units(
-        #  fast_pixel_direction_value,
-        #  fast_pixel_direction_units,
-        #  "mm")
+
         # Get the trusted range of pixel values
         underload = float(nx_detector['undefined_value'][()])  if 'undefined_value'  in nx_detector.handle else -400
         overload  = float(nx_detector['saturation_value'][()]) if 'saturation_value' in nx_detector.handle else 90000
         trusted_range = underload, overload
+
+        fast_pixel_direction_handle = nx_detector_module.handle['fast_pixel_direction']
+        slow_pixel_direction_handle = nx_detector_module.handle['slow_pixel_direction']
+        assert fast_pixel_direction_handle.attrs['depends_on'] == slow_pixel_direction_handle.attrs['depends_on']
+        depends_on = fast_pixel_direction_handle
+        fast_pixel_direction_value = convert_units(
+          fast_pixel_direction_handle[0],
+          fast_pixel_direction_handle.attrs['units'],
+          "mm")
+        slow_pixel_direction_value = convert_units(
+          slow_pixel_direction_handle[0],
+          slow_pixel_direction_handle.attrs['units'],
+          "mm")
+        pixel_size = float(fast_pixel_direction_value), float(slow_pixel_direction_value)
 
         # Set up the hierarchical detector by iteraing through the dependencies,
         # starting at the root
@@ -1182,9 +1177,9 @@ class DetectorFactoryFromGroup(object):
 
         # pg is now this panel's parent
         p = pg.add_panel()
-        fast = depends_on.attrs['vector']
+        fast = fast_pixel_direction_handle.attrs['vector']
         fast = matrix.col([-fast[0], fast[1], -fast[2]])
-        slow = nx_detector_module.handle[depends_on.attrs['depends_on']].attrs['vector']
+        slow = slow_pixel_direction_handle.attrs['vector']
         slow = matrix.col([-slow[0], slow[1], -slow[2]])
         parent, cob = get_cummulative_change_of_basis(depends_on)
         origin = matrix.col((cob * matrix.col((0,0,0,1)))[0:3])
@@ -1528,23 +1523,8 @@ class DataList(object):
 
   def __getitem__(self, index):
     from scitbx.array_family import flex
-    import numpy as np
     d = self.lookup[index]
     i = index - self.offset[d]
-
-    # Keeping this in for the moment to allow evaluation of speed etc
-    # aiming to resolve dials#148
-    # mode_148 = True
-
-    # if mode_148:
-    #   # allocate empty array, copy data in
-    #   data = np.empty((self.height, self.width), dtype='uint32')
-    #   self.datasets[d].read_direct(data, np.s_[i,:,:], np.s_[:,:])
-    # else:
-    #   data = self.datasets[d][i,:,:]
-    #   if data.dtype == np.uint16:
-    #     data = data.astype(np.uint32)
-    # data_as_flex = flex.int(data)
     N, height, width = self.datasets[d].shape
     data_as_flex = dataset_as_flex_int(
       self.datasets[d].id.id,
@@ -1620,7 +1600,6 @@ class MultiPanelDataList(object):
 
   def __getitem__(self, index):
     from scitbx.array_family import flex
-    import numpy as np
     d = self.lookup[index]
     i = index - self.offset[d]
 
@@ -1662,7 +1641,6 @@ class DataFactory(object):
 class DetectorGroupDataFactory(DataFactory):
   """ Class to handle reading data from a detector with a NXdetector_group """
   def __init__(self, obj, instrument):
-    import os
     DataFactory.__init__(self, obj)
 
     # Map NXdetector names to list of datasets

@@ -4,7 +4,6 @@ import scitbx.lbfgs
 from cctbx import maptbx
 from cctbx.array_family import flex
 from mmtbx import utils
-import mmtbx.ncs.ncs_utils as ncs_utils
 from libtbx.test_utils import approx_equal
 from cctbx import crystal
 import mmtbx.refinement.minimization_ncs_constraints
@@ -30,7 +29,7 @@ class easy(object):
         w = None,
         states_accumulator=None,
         log=None):
-    assert gradients_method in ["fd", "linear", "quadratic"]
+    assert gradients_method in ["fd", "linear", "quadratic", "tricubic"]
     adopt_init_args(self, locals())
     es = geometry_restraints_manager.geometry.energies_sites(
       sites_cart = xray_structure.sites_cart())
@@ -324,7 +323,7 @@ class box_refinement_manager(object):
              box_cushion=2,
              rms_bonds_limit = 0.03,
              rms_angles_limit = 3.0):
-    if(self.ncs_groups is None): # no NCS constraints
+    if(self.ncs_groups is None or len(self.ncs_groups)==0): # no NCS constraints
       sites_cart_moving = self.sites_cart
       selection_within = self.xray_structure.selection_within(
         radius    = selection_buffer_radius,
@@ -375,9 +374,7 @@ class box_refinement_manager(object):
       xrs = self.xray_structure.select(selection)
       sel = flex.bool(xrs.scatterers().size(), True)
       size = self.xray_structure.scatterers().size()
-      ncs_groups_ = ncs_utils.ncs_groups_selection(
-        ncs_restraints_group_list = self.ncs_groups,
-        selection                 = selection)
+      ncs_groups_ = self.ncs_groups.select(selection=selection)
       #
       rsr_simple_refiner = simple(
         target_map                  = self.target_map,
@@ -465,7 +462,7 @@ class minimize_wrapper_with_map():
             geometry_restraints_manager = self.model.get_restraints_manager(),
             rms_bonds_limit             = 0.015,
             rms_angles_limit            = 1.0,
-            ncs_groups                  = ncs_restraints_group_list)
+            ncs_groups                  = ncs_groups)
 
         # division is to put more weight onto restraints. Checked. Works.
         self.w = self.weight.weight/3.0

@@ -3,7 +3,7 @@ from __future__ import division
 '''
 Author      : Lyubimov, A.Y.
 Created     : 07/21/2017
-Last Changed: 01/25/2018
+Last Changed: 02/12/2018
 Description : IOTA image-tracking GUI module
 '''
 
@@ -26,6 +26,8 @@ from iota.components.iota_dials import phil_scope, IOTADialsProcessor
 import iota.components.iota_threads as thr
 import iota.components.iota_controls as ct
 
+import time
+assert time # going to keep time around for testing
 
 # Platform-specific stuff
 # TODO: Will need to test this on Windows at some point
@@ -164,6 +166,8 @@ class TrackChart(wx.Panel):
       self.patch_x_last = int(xmax) + 1
       self.patch_width = self.patch_x_last - self.patch_x
       self.bracket_set = True
+
+
       self.main_window.update_image_list()
       self.main_window.tracker_panel.image_list_panel.Show()
       self.main_window.tracker_panel.Layout()
@@ -349,7 +353,7 @@ class TrackChart(wx.Panel):
 
 class ImageList(wx.Panel):
   def __init__(self, parent):
-    wx.Panel.__init__(self, parent=parent, size=(450, -1))
+    wx.Panel.__init__(self, parent, size=(450, -1))
 
     self.main_box = wx.StaticBox(self, label='Hits')
     self.main_sizer = wx.StaticBoxSizer(self.main_box, wx.VERTICAL)
@@ -453,7 +457,7 @@ class FileListCtrl(ct.CustomImageListCtrl, listmix.ColumnSorterMixin):
       self.delete_item(index=0)
 
 class VirtualListCtrl(ct.VirtualImageListCtrl):
-  def __init__(self, parent, columns=3):
+  def __init__(self, parent):
     ct.VirtualImageListCtrl.__init__(self, parent=parent)
     self.parent = parent
     self.tracker_panel = parent.GetParent()
@@ -552,15 +556,19 @@ class TrackerPanel(wx.Panel):
     self.image_list = ImageList(self.image_list_panel)
     self.btn_view_sel = wx.Button(self.image_list_panel, label='View Selected')
     self.btn_view_all = wx.Button(self.image_list_panel, label='View All')
+    self.btn_wrt_file = wx.Button(self.image_list_panel, label='Write to File')
     self.btn_view_sel.Disable()
+    self.btn_wrt_file.Disable()
     self.btn_view_all.Disable()
 
-    btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-    btn_sizer.Add(self.btn_view_all, flag=wx.ALL | wx.ALIGN_RIGHT, border=5)
-    btn_sizer.Add(self.btn_view_sel, flag=wx.ALL | wx.ALIGN_RIGHT, border=5)
+    btn_sizer = wx.FlexGridSizer(1, 3, 0, 5)
+    btn_sizer.Add(self.btn_wrt_file, flag=wx.ALIGN_LEFT)
+    btn_sizer.Add(self.btn_view_all, flag=wx.ALIGN_RIGHT)
+    btn_sizer.Add(self.btn_view_sel, flag=wx.ALIGN_RIGHT)
+    btn_sizer.AddGrowableCol(0)
 
     self.image_list_sizer.Add(self.image_list, 1, flag=wx.EXPAND)
-    self.image_list_sizer.Add(btn_sizer, flag=wx.ALIGN_RIGHT)
+    self.image_list_sizer.Add(btn_sizer, flag=wx.ALIGN_RIGHT | wx.EXPAND)
     self.image_list_panel.SetSizer(self.image_list_sizer)
 
     self.main_sizer.Add(self.graph_panel, pos=(1, 0),
@@ -668,8 +676,8 @@ class TrackerWindow(wx.Frame):
     self.Bind(wx.EVT_TOOL, self.onRestoreRun, self.tb_btn_restore)
     self.Bind(wx.EVT_TOOL, self.onStop, self.tb_btn_stop)
     self.Bind(wx.EVT_BUTTON, self.onSelView, self.tracker_panel.btn_view_sel)
+    self.Bind(wx.EVT_BUTTON, self.onWrtFile, self.tracker_panel.btn_wrt_file)
     self.Bind(wx.EVT_BUTTON, self.onAllView, self.tracker_panel.btn_view_all)
-    # self.Bind(wx.EVT_TOOL, self.onView, self.tb_btn_view)
 
     # Spotfinder / timer bindings
     self.Bind(thr.EVT_SPFDONE, self.onSpfOneDone)
@@ -688,6 +696,7 @@ class TrackerWindow(wx.Frame):
     self.frame_count = []
     self.obs_counts = []
     self.done_list = []
+    self.data_list = []
     self.new_frames = []
     self.new_counts = []
     self.spotfinding_info = []
@@ -695,6 +704,20 @@ class TrackerWindow(wx.Frame):
     self.current_min_bragg = 0
     self.waiting = False
     self.terminated = False
+
+  def onWrtFile(self, e):
+    idxs = []
+    listctrl = self.tracker_panel.image_list.image_list.ctr
+    if listctrl.GetSelectedItemCount() == 0:
+      for index in range(listctrl.GetItemCount()):
+        idxs.append(index)
+    else:
+      index = listctrl.GetFirstSelected()
+      idxs.append(index)
+      while len(idxs) != listctrl.GetSelectedItemCount():
+        index = listctrl.GetNextSelected(index)
+        idxs.append(index)
+    self.write_images_to_file(idxs=idxs)
 
   def onSelView(self, e):
     idxs = []
@@ -713,6 +736,22 @@ class TrackerWindow(wx.Frame):
     listctrl = self.tracker_panel.image_list.image_list.ctr
     idxs = range(listctrl.GetItemCount())
     self.view_images(idxs=idxs)
+
+  def write_images_to_file(self, idxs):
+    # Determine param filepath
+    save_dlg = wx.FileDialog(self,
+                             message="Save Image Paths to File",
+                             defaultDir=os.curdir,
+                             defaultFile="*.lst",
+                             wildcard="*",
+                             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT
+                             )
+    if save_dlg.ShowModal() == wx.ID_OK:
+      script_filepath = save_dlg.GetPath()
+      file_list = [self.data_dict[idx][1] for idx in idxs]
+      with open(script_filepath, 'w') as img_file:
+        file_list_string = '\n'.join(file_list)
+        img_file.write(file_list_string)
 
   def view_images(self, idxs):
     file_list = [self.data_dict[idx][1] for idx in idxs]
@@ -858,7 +897,7 @@ class TrackerWindow(wx.Frame):
         self.new_counts.append(obs_count)
         self.spotfinding_info.append([idx, obs_count, img_path])
         self.all_info.append([idx, obs_count, img_path])
-      self.plot_results()
+      #self.plot_results()
 
   def onSpfAllDone(self, e):
     self.done_list.extend(e.GetValue())
@@ -878,10 +917,19 @@ class TrackerWindow(wx.Frame):
       last_file = self.done_list[-1]
     else:
       last_file = None
-    found_files = ginp.make_input_list([self.data_folder], last=last_file)
+    found_files = ginp.make_input_list([self.data_folder],
+                                       filter=True,
+                                       filter_type='image',
+                                       last=last_file)
 
-    self.data_list = [i for i in found_files if i not in self.done_list]
+    if found_files != []:
+      print 'DEBUG: FIRST FILE - {}'.format(found_files[0])
+
+    self.data_list = list(set(found_files) - set(self.done_list))
     self.data_list = [i for i in self.data_list if not 'tmp' in i]
+
+    print 'DEBUG: FOUND {} FILES\n'.format(len(self.data_list))
+
     if len(self.data_list) == 0:
       self.msg = 'Waiting for new images in {} ...'.format(self.data_folder)
       self.waiting = True
@@ -908,7 +956,7 @@ class TrackerWindow(wx.Frame):
     self.tracker_panel.status_txt.SetLabel('{} {}'.format(timer_txt, self.msg))
 
     if not self.terminated:
-      # self.plot_results()
+      self.plot_results()
       if len(self.data_list) == 0:
         self.find_new_images()
     else:
@@ -929,6 +977,7 @@ class TrackerWindow(wx.Frame):
         self.data_dict = new_data_dict
         listctrl.InitializeDataMap(self.data_dict)
         self.tracker_panel.btn_view_all.Enable()
+        self.tracker_panel.btn_wrt_file.Enable()
 
       except TypeError:
         pass

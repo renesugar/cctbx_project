@@ -8,6 +8,8 @@ from scitbx.matrix import sqr, col
 from xfel.merging.algorithms.error_model.error_modeler_base import error_modeler_base
 from xfel.merging.algorithms.error_model.sdfac_refine_lbfgs import finite_difference
 
+from libtbx import group_args
+
 """
 Classes to support propagating erros after postrefinement in cxi.merge
 """
@@ -15,7 +17,39 @@ Classes to support propagating erros after postrefinement in cxi.merge
 def r2d(radians):
   return 180*radians/math.pi
 
+# Bucket to hold refinable error terms
+class error_terms(group_args):
+  @staticmethod
+  def from_x(x):
+    return error_terms(sigma_thetax  = x[0],
+                       sigma_thetay  = x[1],
+                       sigma_lambda  = x[2],
+                       sigma_deff    = x[3],
+                       sigma_eta     = x[4],
+                       sigma_gstar   = x[5:])
+
+  def to_x(self):
+    x = flex.double([self.sigma_thetax,
+                     self.sigma_thetay,
+                     self.sigma_lambda,
+                     self.sigma_deff,
+                     self.sigma_eta])
+    x.extend(self.sigma_gstar)
+    return x
+
 class sdfac_propagate(error_modeler_base):
+  def __init__(self, scaler, error_terms = None, verbose = True):
+    super(sdfac_propagate, self).__init__(scaler)
+
+    # Note, since the rs algorithm doesn't explicitly refine eta and deff separately, but insteads refines RS,
+    # assume rs only incorporates information from deff and set eta to zero.
+    ct = scaler.crystal_table
+    ct['deff'] = 1/ct['RS']
+    ct['eta'] = flex.double(len(ct), 0)
+
+    self.error_terms = error_terms
+    self.verbose = verbose
+
   def finite_difference(self, parameter_name, table, DELTA = 1.E-7):
     """ Compute finite difference given a parameter name """
     refls = self.scaler.ISIGI
@@ -86,7 +120,6 @@ class sdfac_propagate(error_modeler_base):
       deff.extend(flex.double(n_refl, ct['deff'][i]))
       eta.extend(flex.double(n_refl, ct['eta'][i]))
 
-    iobs       = refls['iobs']
     h          = refls['miller_index_original'].as_vec3_double()
     q          = ry * rx * u * b * h                  # vector pointing from origin of reciprocal space to RLP
     qlen       = q.norms()                            # length of q
@@ -137,22 +170,9 @@ class sdfac_propagate(error_modeler_base):
 
     return r
 
-  def adjust_errors(self):
-    """ Propagate errors to the scaled and merged intensity errors based on statistical error propagation.
-    This uses 1) and estimate of the errors in the post-refined parametes from the observed population
-    and 2) partial derivatives of the scaled intensity with respect to each of the post-refined parameters.
-    """
-    assert self.scaler.params.postrefinement.algorithm == 'rs'
-
-    refls = self.scaler.ISIGI
-    ct = self.scaler.crystal_table
-
-    # Note, since the rs algorithm doesn't explicitly refine eta and deff separately, but insteads refines RS,
-    # assume rs only incorporates information from deff and set eta to zero.
-    ct['deff'] = 1/ct['RS']
-    ct['eta'] = flex.double(len(ct), 0)
-
+  def initial_estimates(self):
     # Compute errors by examining distributions of parameters
+    ct = self.scaler.crystal_table
     stats_thetax = flex.mean_and_variance(ct['thetax'])
     stats_thetay = flex.mean_and_variance(ct['thetay'])
     stats_lambda = flex.mean_and_variance(ct['wavelength'])
@@ -163,7 +183,7 @@ class sdfac_propagate(error_modeler_base):
     sigma_thetay = stats_thetay.unweighted_sample_standard_deviation()
     sigma_lambda = stats_lambda.unweighted_sample_standard_deviation()
     sigma_eta    = 0 #stats_eta.unweighted_sample_standard_deviation()
-    sigma_deff   = stats_deff.unweighted_sample_standard_deviation()
+    sigma_deff   = stats_deff.unweighted_standard_error_of_mean()
     sigma_rs     = stats_rs.unweighted_sample_standard_deviation()
     print >> self.log, "ThetaX %.4f +/- %.4f"    %(r2d(stats_thetax.mean()), r2d(sigma_thetax))
     print >> self.log, "Thetay %.4f +/- %.4f"    %(r2d(stats_thetay.mean()), r2d(sigma_thetay))
@@ -171,6 +191,38 @@ class sdfac_propagate(error_modeler_base):
     #print "ETA %.4f +/- %.4f"       %(    stats_eta.mean(),         sigma_eta)
     print >> self.log, "DEFF %.4f +/- %.4f"      %(    stats_deff.mean(),        sigma_deff)
     print >> self.log, "RS %.6f +/- %.6f"        %(    stats_rs.mean(),          sigma_rs)
+
+    sre = symmetrize_reduce_enlarge(self.scaler.params.target_space_group.group())
+    c_gstar_params = None
+
+    for i in xrange(len(ct)):
+      # Get the G* unit cell parameters from cctbx
+      sre.set_orientation(orientation=ct['b_matrix'][i])
+      p = sre.forward_independent_parameters()
+      if c_gstar_params is None:
+        c_gstar_params = [flex.double() for j in xrange(len(p))]
+
+      for j in xrange(len(p)):
+        c_gstar_params[j].append(p[j])
+
+    # Compute the error in the unit cell terms from the distribution of unit cell parameters provided
+    print >> self.log, "Free G* parameters"
+    sigma_gstar = flex.double()
+    for j in xrange(len(c_gstar_params)):
+      stats  = flex.mean_and_variance(c_gstar_params[j])
+      print >> self.log, "G* %d %.4f *1e-5 +/- %.4f *1e-5"%(j, stats.mean()*1e5, stats.unweighted_sample_standard_deviation()*1e5)
+      sigma_gstar.append(stats.unweighted_sample_standard_deviation())
+
+    self.error_terms = error_terms(sigma_thetax  = sigma_thetax,
+                                   sigma_thetay  = sigma_thetay,
+                                   sigma_lambda  = sigma_lambda,
+                                   sigma_deff    = sigma_deff,
+                                   sigma_eta     = sigma_eta,
+                                   sigma_gstar   = sigma_gstar)
+
+  def dI_derrorterms(self):
+    refls = self.scaler.ISIGI
+    ct = self.scaler.crystal_table
 
     # notation: dP1_dP2 is derivative of parameter 1 with respect to parameter 2. Here,
     # for example, is the derivative of rx wrt thetax
@@ -183,7 +235,6 @@ class sdfac_propagate(error_modeler_base):
 
     # Compute derivatives
     sre = symmetrize_reduce_enlarge(self.scaler.params.target_space_group.group())
-    c_gstar_params = None
     gstar_params = None
     gstar_derivatives = None
 
@@ -199,27 +250,16 @@ class sdfac_propagate(error_modeler_base):
       p = sre.forward_independent_parameters()
       dB_dp = sre.forward_gradients()
       if gstar_params is None:
-        assert gstar_derivatives is None and c_gstar_params is None
-        c_gstar_params = [flex.double() for j in xrange(len(p))]
+        assert gstar_derivatives is None
         gstar_params = [flex.double() for j in xrange(len(p))]
         gstar_derivatives = [flex.mat3_double() for j in xrange(len(p))]
-      assert len(p) == len(dB_dp) == len(gstar_params) == len(gstar_derivatives) == len(c_gstar_params)
+      assert len(p) == len(dB_dp) == len(gstar_params) == len(gstar_derivatives)
       for j in xrange(len(p)):
-        c_gstar_params[j].append(p[j])
         gstar_params[j].extend(flex.double(n_refl, p[j]))
         gstar_derivatives[j].extend(flex.mat3_double(n_refl, tuple(dB_dp[j])))
 
-
-    # Compute the error in the unit cell terms from the distribution of unit cell parameters provided
-    print >> self.log, "Free G* parameters"
-    sigma_gstar = []
-    for j in xrange(len(gstar_params)):
-      stats  = flex.mean_and_variance(c_gstar_params[j])
-      print >> self.log, "G* %d %.4f *1e-5 +/- %.4f *1e-5"%(j, stats.mean()*1e5, stats.unweighted_sample_standard_deviation()*1e5)
-      sigma_gstar.append(stats.unweighted_sample_standard_deviation())
-
     # Compute the scalar terms used while computing derivatives
-    r = self.compute_intensity_parameters()
+    self.r = r = self.compute_intensity_parameters()
 
     # Begin computing derivatives
     sigma_Iobs = refls['scaled_intensity']/refls['isigi']
@@ -274,7 +314,7 @@ class sdfac_propagate(error_modeler_base):
     dP_deta  = ((r['p_d']*dPn_deta)-(r['p_n']*dPd_deta))/(r['p_d']**2)
     dI_deta  = -(refls['iobs']/(r['partiality']**2 * r['G'] * r['eepsilon'])) * dP_deta
 
-    if True:
+    if self.verbose:
       # Show comparisons to finite differences
       n_cryst_params = sre.constraints.n_independent_params()
       print "Showing finite differences and derivatives for each parameter (first few reflections only)"
@@ -293,43 +333,68 @@ class sdfac_propagate(error_modeler_base):
             stats.mean(), stats.unweighted_sample_standard_deviation(), percent)
         print
 
+    return [dI_dIobs, dI_dthetax, dI_dthetay, dI_dlambda, dI_deff, dI_deta] + dI_dgstar
+
+  def adjust_errors(self, dI_derrorterms = None, compute_sums = True):
+    """ Propagate errors to the scaled and merged intensity errors based on statistical error propagation.
+    This uses 1) and estimate of the errors in the post-refined parametes from the observed population
+    and 2) partial derivatives of the scaled intensity with respect to each of the post-refined parameters.
+    """
+    assert self.scaler.params.postrefinement.algorithm == 'rs'
+
+    refls = self.scaler.ISIGI
+    ct = self.scaler.crystal_table
+
+    if self.error_terms is None:
+      self.initial_estimates()
+
+    if dI_derrorterms is None:
+      dI_derrorterms = self.dI_derrorterms()
+    dI_dIobs, dI_dthetax, dI_dthetay, dI_dlambda, dI_deff, dI_deta = dI_derrorterms[0:6]
+    dI_dgstar = dI_derrorterms[6:]
+    sigma_Iobs = refls['scaled_intensity']/refls['isigi']
+    r = self.r
+
     # Propagate errors
-    refls['isigi'] = refls['scaled_intensity'] / flex.sqrt(((sigma_Iobs**2 * dI_dIobs**2) +
-                                                            sum([sigma_gstar[j]**2 * dI_dgstar[j]**2 for j in xrange(len(sigma_gstar))]) +
-                                                            (sigma_thetax**2 * dI_dthetax**2) +
-                                                            (sigma_thetay**2 * dI_dthetay**2) +
-                                                            (sigma_lambda**2 * dI_dlambda**2) +
-                                                            (sigma_deff**2 * dI_deff**2) +
-                                                            (sigma_eta**2 * dI_deta**2)))
+    refls['isigi'] = refls['scaled_intensity'] / \
+                     flex.sqrt((sigma_Iobs**2 * dI_dIobs**2) +
+                     sum([self.error_terms.sigma_gstar[j]**2 * dI_dgstar[j]**2 for j in xrange(len(self.error_terms.sigma_gstar))]) +
+                     (self.error_terms.sigma_thetax**2 * dI_dthetax**2) +
+                     (self.error_terms.sigma_thetay**2 * dI_dthetay**2) +
+                     (self.error_terms.sigma_lambda**2 * dI_dlambda**2) +
+                     (self.error_terms.sigma_deff**2 * dI_deff**2) +
+                     (self.error_terms.sigma_eta**2 * dI_deta**2))
 
-    # Show results of propagation
-    from scitbx.math import five_number_summary
-    all_data = [(refls['iobs'], "Iobs"),
-                (sigma_Iobs, "Original errors"),
-                (1/r['D'], "Total scale factor"),
-                (refls['iobs']/r['D'], "Inflated intensities"),
-                (refls['scaled_intensity']/refls['isigi'], "Propagated errors"),
-                (flex.sqrt(sigma_Iobs**2 * dI_dIobs**2), "Iobs term"),
-                (flex.sqrt(sigma_thetax**2 * dI_dthetax**2), "Thetax term"),
-                (flex.sqrt(sigma_thetay**2 * dI_dthetay**2), "Thetay term"),
-                (flex.sqrt(sigma_lambda**2 * dI_dlambda**2), "Wavelength term"),
-                (flex.sqrt(sigma_deff**2 * dI_deff**2), "Deff term"),
-                (flex.sqrt(sigma_eta**2 * dI_deta**2), "Eta term")] + \
-               [(flex.sqrt(sigma_gstar[j]**2 * dI_dgstar[j]**2), "Gstar term %d"%j) for j in xrange(len(sigma_gstar))]
-    print >> self.log, "%20s % 20s % 20s % 20s"%("Data name","Quartile 1", "Median", "Quartile 3")
-    for data, title in all_data:
-      fns = five_number_summary(data)
-      print >> self.log, "%20s % 20d % 20d % 20d"%(title, fns[1], fns[2], fns[3])
+    if self.verbose:
+      # Show results of propagation
+      from scitbx.math import five_number_summary
+      all_data = [(refls['iobs'], "Iobs"),
+                  (sigma_Iobs, "Original errors"),
+                  (1/r['D'], "Total scale factor"),
+                  (refls['iobs']/r['D'], "Inflated intensities"),
+                  (refls['scaled_intensity']/refls['isigi'], "Propagated errors"),
+                  (flex.sqrt(sigma_Iobs**2 * dI_dIobs**2), "Iobs term"),
+                  (flex.sqrt(self.error_terms.sigma_thetax**2 * dI_dthetax**2), "Thetax term"),
+                  (flex.sqrt(self.error_terms.sigma_thetay**2 * dI_dthetay**2), "Thetay term"),
+                  (flex.sqrt(self.error_terms.sigma_lambda**2 * dI_dlambda**2), "Wavelength term"),
+                  (flex.sqrt(self.error_terms.sigma_deff**2 * dI_deff**2), "Deff term"),
+                  (flex.sqrt(self.error_terms.sigma_eta**2 * dI_deta**2), "Eta term")] + \
+                 [(flex.sqrt(self.error_terms.sigma_gstar[j]**2 * dI_dgstar[j]**2), "Gstar term %d"%j) for j in xrange(len(self.error_terms.sigma_gstar))]
+      print >> self.log, "%20s % 20s % 20s % 20s"%("Data name","Quartile 1", "Median", "Quartile 3")
+      for data, title in all_data:
+        fns = five_number_summary(data)
+        print >> self.log, "%20s % 20d % 20d % 20d"%(title, fns[1], fns[2], fns[3])
 
-    # Final terms for cxi.merge
-    self.scaler.summed_weight= flex.double(self.scaler.n_refl, 0.)
-    self.scaler.summed_wt_I  = flex.double(self.scaler.n_refl, 0.)
+    if compute_sums:
+      # Final terms for cxi.merge
+      self.scaler.summed_weight= flex.double(self.scaler.n_refl, 0.)
+      self.scaler.summed_wt_I  = flex.double(self.scaler.n_refl, 0.)
 
-    Intensity = refls['scaled_intensity']
-    sigma = Intensity / refls['isigi']
-    variance = sigma * sigma
+      Intensity = refls['scaled_intensity']
+      sigma = Intensity / refls['isigi']
+      variance = sigma * sigma
 
-    for i in xrange(len(refls)):
-      j = refls['miller_id'][i]
-      self.scaler.summed_wt_I[j] += Intensity[i] / variance[i]
-      self.scaler.summed_weight[j] += 1 / variance[i]
+      for i in xrange(len(refls)):
+        j = refls['miller_id'][i]
+        self.scaler.summed_wt_I[j] += Intensity[i] / variance[i]
+        self.scaler.summed_weight[j] += 1 / variance[i]
