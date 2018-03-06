@@ -1,4 +1,3 @@
-
 """
 Automated build of CCTBX dependencies for Linux and Mac platforms.
 This script will download and install the current Python distribution provided
@@ -141,7 +140,7 @@ class installer (object) :
     print >> log, "Setting up directories..."
     for dir_name in [self.tmp_dir,self.build_dir,self.base_dir]:
       if (not op.isdir(dir_name)) :
-        if self.with_conda and dir_name == self.base_dir: continue 
+        if self.with_conda and dir_name == self.base_dir:continue
         print >> log, "  creating %s" % dir_name
         os.makedirs(dir_name)
     self.check_python_dependencies()
@@ -210,8 +209,6 @@ class installer (object) :
     if self.python_exe:
       print >> log, "Using Python interpreter: %s" % self.python_exe
 
-    print 'asas2 ARE YOUOWHDOH!EOY!NL'
-
     if not self.python_exe and 'SuSE' in platform.platform():
       if 'CONFIG_SITE' in os.environ:
         print >> log, 'SuSE detected; clobbering CONFIG_SITE in environ'
@@ -261,13 +258,11 @@ class installer (object) :
                         'tiff',                    # conda name is libtiff
                         'freetype','glib','render','gtk','fonts']     # GUI related packages
 
-    conda_pkgs = ['mpich2', 'wxpython', 'pillow', 'libtiff']
-    print 'BEFORE SET = ====== ',packages
+    conda_pkgs = ['h5py', 'mpich2', 'wxpython', 'pillow', 'libtiff']
     if self.with_conda:
       packages = list(set(packages).difference(psana_conda_pkgs))
       packages = list(set(packages).difference(conda_pkgs))
 
-    print 'AFTER SET = ====== ',packages
     # Do the work!
     self.check_dependencies(packages=packages)
     self.build_dependencies(packages=packages, conda_pkgs=conda_pkgs)
@@ -685,7 +680,6 @@ Installation of Python packages may fail.
       extra_options = ' '.join(extra_options)
     else:
       extra_options = ''
-    print pkg_info['python'], ' XX',pkg_info['debug'], pkg_info['package'], pkg_info['version'],pkg_info['cachedir']
     self.call(pkg_info['python'] + ' -m pip download ' + pkg_info['debug'] + \
               ' "' + pkg_info['package'] + pkg_info['version'] + '" -d "' + \
               pkg_info['cachedir'] + '" ' + extra_options,
@@ -786,10 +780,10 @@ Installation of Python packages may fail.
       os.chdir(op.join(self.tmp_dir,'..'))
       try:
         self.install_with_conda(conda_pkgs, extra_opts=[])
-      except:
+      except Exception:
         raise RuntimeError("conda installation has failed. Please see log")
     python_exe = op.abspath(op.join(self.base_dir, "bin", "python"))
-    self.set_python(op.abspath(python_exe)) 
+    self.set_python(op.abspath(python_exe))
     packages_order = []
     for i in packages:
       assert i in order, "Installation order unknown for %s" % i
