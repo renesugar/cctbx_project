@@ -1,4 +1,9 @@
 from __future__ import absolute_import, division
+try:
+  import h5py # h5py needs to be imported first before anything in dxtbx to work around ASan issues with conda builds
+except ImportError:
+  pass
+
 from scitbx.array_family import flex # import dependency
 try:
   import boost.python
